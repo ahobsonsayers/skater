@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 
 	"github.com/foolin/pagser"
 )
@@ -31,15 +32,29 @@ func NewScraper(config Config) (*Scraper, error) {
 
 // Scrape starts the scraper with the initial page requests given.
 func (s *Scraper) Scrape(ctx context.Context, initialPageRequests []PageRequest) ([]any, error) {
-	return s.scrapeRecursive(ctx, initialPageRequests, 0)
+	pageResults, err := s.scrapeRecursive(ctx, initialPageRequests, 0)
+
+	results := make([]any, 0, len(pageResults))
+	for _, pageResult := range pageResults {
+		if pageResult.ShouldEmit {
+			results = append(results, pageResult.Result)
+		}
+	}
+
+	return slices.Clip(results), err
 }
 
-func (s *Scraper) scrapeRecursive(ctx context.Context, requests []PageRequest, depth int) ([]any, error) {
+type pageResult struct {
+	Result     any
+	ShouldEmit bool
+}
+
+func (s *Scraper) scrapeRecursive(ctx context.Context, requests []PageRequest, depth int) ([]pageResult, error) {
 	if depth >= s.config.MaxDepth {
 		return nil, nil
 	}
 
-	var results []any
+	var results []pageResult
 	for _, request := range requests {
 		// Check if context has been cancelled
 		err := ctx.Err()
@@ -72,34 +87,55 @@ func (s *Scraper) scrapeRecursive(ctx context.Context, requests []PageRequest, d
 			return nil, fmt.Errorf("failed to parse content from url '%s': %w", request.URL, parseErr)
 		}
 
-		// Get next page requests using the NextRequests method if defined.
+		// Get next page requests using the NextPageRequests method if defined.
 		var nextRequests []PageRequest
 		if p, ok := page.(PageNextRequests); ok {
-			nextRequests = p.NextRequests()
+			nextRequests = p.NextPageRequests()
 		}
 
 		// Recursively scrape
+		var childPageResults []pageResult
 		if len(nextRequests) > 0 {
-			subResults, err := s.scrapeRecursive(ctx, nextRequests, depth+1)
+			var err error
+			childPageResults, err = s.scrapeRecursive(ctx, nextRequests, depth+1)
 			if err != nil {
 				return nil, err
 			}
-			results = append(results, subResults...)
 		}
 
-		// Get result page data using the Result method if defined,
+		// Collect child results using CollectPageResults method if defined
+		if p, ok := page.(PageCollectResults); ok {
+			childResults := make([]any, 0, len(childPageResults))
+			for _, childResult := range childPageResults {
+				childResults = append(childResults, childResult.Result)
+			}
+
+			p.CollectPageResults(childResults)
+		}
+
+		// Get result data using the Result method if defined,
 		// otherwise falling back to the page as the data
-		var data any
+		var result any
 		if p, ok := page.(PageResult); ok {
-			data = p.Result()
+			result = p.Result()
 		} else {
-			data = page
+			result = page
 		}
 
-		// A nil result means this page does not emit any result
-		if data != nil {
-			results = append(results, data)
+		// Return results that should be emitted
+		shouldEmit := true
+		if p, ok := page.(PageShouldEmit); ok {
+			shouldEmit = p.ShouldEmit()
 		}
+
+		results = append(results, childPageResults...)
+		results = append(
+			results,
+			pageResult{
+				Result:     result,
+				ShouldEmit: shouldEmit,
+			},
+		)
 	}
 
 	return results, nil
