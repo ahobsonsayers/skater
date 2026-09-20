@@ -19,10 +19,15 @@ Under the hood, it uses the wonderful `pagser` library to parse HTML using struc
 
 ### Results
 
-Each page controls what it emits into the final results by implementing (or not) the `Result` method:
+The scrape traverses down via `NextPageRequests` (like a call stack going down) and back up via `CollectPageResults` (like returns bubbling up). Result data flows in two directions:
 
-- **No `Result` method:** the page struct itself is returned as the result. Alternatively, implement a method that simply returns the receiver.
-- **`Result` returns data:** that data is returned as the result instead of the page.
-- **`Result` returns `nil`:** no result data is emitted at all — use this for pages that only exist to enrich other pages (e.g. a parent that aggregates its children's data).
+- **Up-flow:** every page's result data — including explicit nils — bubbles up through its parents. A parent can observe the data of the pages it spawned by implementing `CollectPageResults(childResults []any)`; collecting does not consume the results, they keep bubbling up.
+- **Final results:** the same result data enters the final results unless the page implements `ShouldEmit()` returning `false`.
 
-Working examples of all three modes live in [`examples/`](examples/): [`aggregation`](examples/aggregation), [`injection`](examples/injection), and [`crawl`](examples/crawl).
+What result data a page carries is controlled by the `Result` method:
+
+- **No `Result` method:** the page struct itself is the result data. Alternatively, implement a method that simply returns the receiver.
+- **`Result` returns data:** that data is the result data instead of the page.
+- **`Result` returns `nil`:** the nil itself is the result data — an explicit choice, passed up to collectors and emitted into the final results unless `ShouldEmit` gates it. Combine with `ShouldEmit` returning `false` for a page that only enriches its children.
+
+Working examples live in [`examples/`](examples/): [`aggregation`](examples/aggregation) (parent collects child results, `ShouldEmit` silences children), [`injection`](examples/injection) (parent carries no data, children emit), and [`crawl`](examples/crawl) (parent and children all emit).
