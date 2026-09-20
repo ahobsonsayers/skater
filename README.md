@@ -16,3 +16,13 @@ Under the hood, it uses the wonderful `pagser` library to parse HTML using struc
 - **Type-Safe Extraction:** Uses Go generics to yield clean, fully-typed data. Say goodbye to `interface{}` casting.
 - **Smart Data Enrichment:** Easily pass context down to child pages, or aggregate child data back up to a parent object using standard Go pointers.
 - **Pluggable Fetcher:** A lean interface makes it trivial to swap the default HTTP client for a proxy rotator or headless browser (like Playwright).
+
+### Results
+
+Each page controls what it emits into the final results by implementing (or not) the `Result` method:
+
+- **No `Result` method:** the page struct itself is returned as the result. Alternatively, implement a method that simply returns the receiver.
+- **`Result` returns data:** that data is returned as the result instead of the page.
+- **`Result` returns `nil`:** no result data is emitted at all — use this for pages that only exist to enrich other pages (e.g. a parent that aggregates its children's data).
+
+Working examples of all three modes live in [`examples/`](examples/): [`aggregation`](examples/aggregation), [`injection`](examples/injection), and [`crawl`](examples/crawl).

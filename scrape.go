@@ -50,7 +50,7 @@ func (s *Scraper) scrapeRecursive(ctx context.Context, requests []PageRequest, d
 		// Check the page type we will unmarshal to is a pointer
 		page := request.Page
 		if page == nil || reflect.TypeOf(page).Kind() != reflect.Ptr {
-			return nil, fmt.Errorf("page must be a non-nil pointer, got '%T' for url '%s'", page)
+			return nil, fmt.Errorf("page must be a non-nil pointer, got '%T' for url '%s'", page, request.URL)
 		}
 
 		// Fetch html content
@@ -88,7 +88,7 @@ func (s *Scraper) scrapeRecursive(ctx context.Context, requests []PageRequest, d
 		}
 
 		// Get result page data using the Result method if defined,
-		// otherwise calling falling back to the page as the data
+		// otherwise falling back to the page as the data
 		var data any
 		if p, ok := page.(PageResult); ok {
 			data = p.Result()
@@ -96,8 +96,7 @@ func (s *Scraper) scrapeRecursive(ctx context.Context, requests []PageRequest, d
 			data = page
 		}
 
-		// If data is nil i.e. the Result method return nil
-		// omit data from the results
+		// A nil result means this page does not emit any result
 		if data != nil {
 			results = append(results, data)
 		}

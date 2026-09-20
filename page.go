@@ -23,6 +23,9 @@ type PageParser interface {
 
 // PageResult allows returning custom result data from a page struct.
 // If not implemented, the page struct itself is used as result data.
+//
+// If Result returns nil, the page is omitted from results entirely.
+// This is how pages that only enrich other pages suppress their emission.
 type PageResult interface {
 	// Result returns the scraped data from the page.
 	Result() any

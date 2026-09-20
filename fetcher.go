@@ -33,7 +33,7 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, err
 
 	resp, err := f.client.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch: %w", url, err)
+		return nil, fmt.Errorf("failed to fetch url '%s': %w", url, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
