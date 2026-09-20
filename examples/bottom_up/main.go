@@ -1,9 +1,8 @@
 // Bottom-Up example: Parent aggregates data from child pages.
 //
-// The category page (parent) creates a page request for each book,
-// keeping a reference to every child page it creates. As child pages
-// complete, the shared structs are filled in, and the parent reads
-// them back in Result to build the final BookCategory.
+// The parent page emits a BookCategory as a result.
+// This result contains information aggregated from child pages.
+// Each child page emits nothing as a result.
 //
 // Run: go run ./examples/bottom_up/main.go
 package main
@@ -48,10 +47,10 @@ type BookCategory struct {
 type BookCategoryPage struct {
 	Category string
 	BookURLs []string
-	Books    []*BookDetails
+	Books    []*BookInfo
 }
 
-func (c *BookCategoryPage) ToBookCategory() BookCategory {
+func (c *BookCategoryPage) ToBookCategory() *BookCategory {
 	var totalPrice float64
 	titles := make([]string, 0, len(c.Books))
 	for _, book := range c.Books {
@@ -70,7 +69,7 @@ func (c *BookCategoryPage) ToBookCategory() BookCategory {
 		totalPrice += value
 	}
 
-	return BookCategory{
+	return &BookCategory{
 		Category:   c.Category,
 		BookTitles: titles,
 		BookCount:  len(titles),
@@ -112,13 +111,13 @@ func (c *BookCategoryPage) Parse(r io.Reader) error {
 // NextRequests returns requests to crawl into after this page.
 // If not defined, crawling ends at this page.
 func (c *BookCategoryPage) NextRequests() []skater.PageRequest {
-	// The same book pointers are shared with the requests below
-	// skater fills them in as each child page completes.
-	c.Books = make([]*BookDetails, len(c.BookURLs))
+	// The same book pointers are shared with the requests below.
+	// Skater fills them in as each child page completes.
+	c.Books = make([]*BookInfo, len(c.BookURLs))
 
 	requests := make([]skater.PageRequest, len(c.BookURLs))
 	for i, bookURL := range c.BookURLs {
-		book := &BookDetails{}
+		book := &BookInfo{}
 		requests[i] = skater.PageRequest{
 			URL:  bookURL,
 			Page: book,
@@ -135,22 +134,21 @@ func (c *BookCategoryPage) Result() any {
 	return c.ToBookCategory()
 }
 
-// BookDetails holds data parsed from the book detail web page.
-// It is also the type of the final result we want.
+// BookInfo holds data parsed from the book detail web page.
 //
 // As it does not have a Parse method, pagser will be used to parse.
+// As it does not have a NextRequests method, crawling will end here.
 //
-// As it does not have a NextRequests method, crawling will end on this.
-//
-// Its Result method returns nil, so book pages are not emitted
-type BookDetails struct {
+// Its Result method returns nil, so book pages are not emitted as
+// results. The parent aggregates them.
+type BookInfo struct {
 	Title string `pagser:"div.product_main h1"`
 	Price string `pagser:"p.price_color"`
 }
 
 // Result returns nil so the book page emits nothing into the results.
-// / The parent aggregates child data itself, so only the category page emits a result.
-func (b *BookDetails) Result() any {
+// The parent aggregates child data itself, so only the category page emits a result.
+func (b *BookInfo) Result() any {
 	return nil
 }
 
@@ -176,9 +174,9 @@ func main() {
 		log.Fatalf("Error: %v", err)
 	}
 
-	// Results contain only BookCategory pages
+	// Results contain only *BookCategory values
 	for _, result := range results {
-		bookCategory := result.(BookCategory)
+		bookCategory := result.(*BookCategory)
 		fmt.Printf("Category: %s\n", bookCategory.Category)
 		fmt.Printf("Books found: %d\n", bookCategory.BookCount)
 		fmt.Printf("Total price: £%.2f\n", bookCategory.TotalPrice)

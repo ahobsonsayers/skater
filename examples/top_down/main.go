@@ -1,5 +1,9 @@
 // Top-Down example: Parent injects data into child pages.
 //
+// The parent page type pre-fills child page types with known data.
+// Each child page emits itself as a result.
+// The parent emits nothing.
+//
 // Run: go run ./examples/top_down/main.go
 package main
 
@@ -7,120 +11,129 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"os"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/ahobsonsayers/skater"
 )
 
-type SimpleFetcher struct{}
+type Fetcher struct{}
 
-func (f *SimpleFetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) {
-	resp, err := http.Get(url)
+func (f *Fetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) {
+	response, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
-	return resp.Body, nil
+
+	return response.Body, nil
 }
 
-type CategoryTopDown struct {
-	BookURLs []string
+// BookCategoryPage holds data parsed from the book category web page
+//
+// It is not the type of the final result we want. See BookPage
+type BookCategoryPage struct {
 	Category string
-	Books    []struct {
-		URL   string
-		Title string
-	}
+	BookURLs []string
 }
 
-func (c *CategoryTopDown) Parse(r io.Reader) error {
+func (c *BookCategoryPage) Parse(r io.Reader) error {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
 		return err
 	}
+
+	// Parse category name
 	c.Category = doc.Find("div.page-header h1").First().Text()
+
+	// Parse URLs of books in category
 	baseURL := "http://books.toscrape.com/catalogue/"
-	doc.Find("h3 a").Each(func(i int, s *goquery.Selection) {
-		href, ok := s.Attr("href")
-		title, titleOk := s.Attr("title")
-		if ok {
-			url := href
-			for len(url) > 2 && url[:3] == "../" {
-				url = url[3:]
+	doc.Find("h3 a").Each(
+		func(i int, s *goquery.Selection) {
+			href, ok := s.Attr("href")
+			if !ok {
+				return
 			}
-			url = baseURL + url
-			c.BookURLs = append(c.BookURLs, url)
-			if titleOk {
-				c.Books = append(c.Books, struct {
-					URL   string
-					Title string
-				}{URL: url, Title: title})
+
+			for strings.HasPrefix(href, "../") {
+				href = strings.TrimPrefix(href, "../")
 			}
-		}
-	})
+
+			bookURL := baseURL + href
+			c.BookURLs = append(c.BookURLs, bookURL)
+		},
+	)
 	return nil
 }
 
-func (c *CategoryTopDown) NextRequests() []skater.PageRequest {
-	var reqs []skater.PageRequest
-	for _, bookInfo := range c.Books {
-		reqs = append(reqs, skater.PageRequest{
-			URL: bookInfo.URL,
-			Page: &BookPageTopDown{
+// NextRequests returns requests to crawl into after this page.
+// If not defined, crawling ends at this page.
+func (c *BookCategoryPage) NextRequests() []skater.PageRequest {
+	requests := make([]skater.PageRequest, len(c.BookURLs))
+	for i, bookURL := range c.BookURLs {
+		requests[i] = skater.PageRequest{
+			URL: bookURL,
+			// Inject parent data into the child page up front
+			Page: &BookPage{
 				Category: c.Category,
-				Title:    bookInfo.Title,
 			},
-		})
+		}
 	}
-	return reqs
+
+	return requests
 }
 
-func (c *CategoryTopDown) Result() any {
+// Result returns the final result of the scraping, which can be different to the page type.
+// If not defined, the type parsed into is returned as the result as is.
+func (c *BookCategoryPage) Result() any {
+	// The parent emits nothing. The children carry the results.
 	return nil
 }
 
-type BookPageTopDown struct {
-	Category string
+// BookPage is the type of the final result we want.
+//
+// As it does not have a Parse method, pagser will be used to parse.
+// As it does not have a NextRequests method, crawling will end here.
+// As it does not have a Result method, the type parsed into is
+// returned as the result as is. Every book page is therefore emitted
+// as a result.
+//
+// The parent injects the category into each child page before it is
+// scraped. The child page parses the remaining data itself.
+type BookPage struct {
 	Title    string `pagser:"div.product_main h1"`
 	Price    string `pagser:"p.price_color"`
-}
-
-func (b *BookPageTopDown) Parse(r io.Reader) error {
-	title := b.Title
-	err := skater.DefaultParser.ParseReader(b, r)
-	b.Title = title
-	return err
-}
-
-func (b *BookPageTopDown) NextRequests() []skater.PageRequest {
-	return nil
-}
-
-func (b *BookPageTopDown) Result() any {
-	return b
+	Category string
 }
 
 func main() {
-	fetcher := &SimpleFetcher{}
-	category := &CategoryTopDown{}
+	fetcher := &Fetcher{}
+	config := skater.Config{Fetcher: fetcher}
 
-	scraper, err := skater.NewScraper(skater.Config{Fetcher: fetcher})
+	scraper, err := skater.NewScraper(config)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return
-	}
-	results, err := scraper.Scrape(context.Background(), []skater.PageRequest{
-		{URL: "http://books.toscrape.com/catalogue/category/books/travel_2/index.html", Page: category},
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return
+		log.Fatalf("Error: %v", err)
 	}
 
-	fmt.Println("Books found:")
-	for _, r := range results {
-		if book, ok := r.(*BookPageTopDown); ok {
-			fmt.Printf("  - [%s] %s @ %s\n", book.Category, book.Title, book.Price)
-		}
+	initialRequest := skater.PageRequest{
+		URL:  "http://books.toscrape.com/catalogue/category/books/travel_2/index.html",
+		Page: &BookCategoryPage{},
+	}
+
+	results, err := scraper.Scrape(
+		context.Background(),
+		[]skater.PageRequest{initialRequest},
+	)
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+
+	// Results contain only *BookPage pages
+	for _, result := range results {
+		bookPage := result.(*BookPage)
+		fmt.Printf("Category: %s\n", bookPage.Category)
+		fmt.Printf("Title: %s\n", bookPage.Title)
+		fmt.Printf("Price: %s\n", bookPage.Price)
 	}
 }

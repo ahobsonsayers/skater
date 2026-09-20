@@ -1,5 +1,9 @@
 // Multi-Emission example: Both parent and children emit data.
 //
+// The parent page emits a BookCategory as a result.
+// Each child page emits itself as a result.
+// Every page contributes its own result.
+//
 // Run: go run ./examples/multi_emission/main.go
 package main
 
@@ -7,110 +11,138 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"os"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/ahobsonsayers/skater"
 )
 
-type SimpleFetcher struct{}
+type Fetcher struct{}
 
-func (f *SimpleFetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) {
-	resp, err := http.Get(url)
+func (f *Fetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) {
+	response, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
-	return resp.Body, nil
+
+	return response.Body, nil
 }
 
-type CategoryMulti struct {
-	BookURLs []string
-	Category string
-}
-
-func (c *CategoryMulti) Parse(r io.Reader) error {
-	doc, err := goquery.NewDocumentFromReader(r)
-	if err != nil {
-		return err
-	}
-	c.Category = doc.Find("div.page-header h1").First().Text()
-	baseURL := "http://books.toscrape.com/catalogue/"
-	doc.Find("h3 a").Each(func(i int, s *goquery.Selection) {
-		href, ok := s.Attr("href")
-		if ok {
-			url := href
-			for len(url) > 2 && url[:3] == "../" {
-				url = url[3:]
-			}
-			url = baseURL + url
-			c.BookURLs = append(c.BookURLs, url)
-		}
-	})
-	return nil
-}
-
-func (c *CategoryMulti) NextRequests() []skater.PageRequest {
-	var reqs []skater.PageRequest
-	for _, url := range c.BookURLs {
-		reqs = append(reqs, skater.PageRequest{URL: url, Page: &BookPageMulti{}})
-	}
-	return reqs
-}
-
-type CategoryStats struct {
+// BookCategory is the type of the final result we want.
+//
+// This is returned by the Result method of BookCategoryPage.
+type BookCategory struct {
 	Category string
 	BookURLs int
 }
 
-func (c *CategoryMulti) Result() any {
-	return CategoryStats{
+// BookCategoryPage holds data parsed from the book category web page
+//
+// It is not the type of the final result we want. See BookCategory
+type BookCategoryPage struct {
+	Category string
+	BookURLs []string
+}
+
+func (c *BookCategoryPage) ToBookCategory() *BookCategory {
+	return &BookCategory{
 		Category: c.Category,
 		BookURLs: len(c.BookURLs),
 	}
 }
 
-type BookPageMulti struct {
+func (c *BookCategoryPage) Parse(r io.Reader) error {
+	doc, err := goquery.NewDocumentFromReader(r)
+	if err != nil {
+		return err
+	}
+
+	// Parse category name
+	c.Category = doc.Find("div.page-header h1").First().Text()
+
+	// Parse URLs of books in category
+	baseURL := "http://books.toscrape.com/catalogue/"
+	doc.Find("h3 a").Each(
+		func(i int, s *goquery.Selection) {
+			href, ok := s.Attr("href")
+			if !ok {
+				return
+			}
+
+			for strings.HasPrefix(href, "../") {
+				href = strings.TrimPrefix(href, "../")
+			}
+
+			bookURL := baseURL + href
+			c.BookURLs = append(c.BookURLs, bookURL)
+		},
+	)
+	return nil
+}
+
+// NextRequests returns requests to crawl into after this page.
+// If not defined, crawling ends at this page.
+func (c *BookCategoryPage) NextRequests() []skater.PageRequest {
+	requests := make([]skater.PageRequest, len(c.BookURLs))
+	for i, bookURL := range c.BookURLs {
+		requests[i] = skater.PageRequest{
+			URL:  bookURL,
+			Page: &BookInfo{},
+		}
+	}
+
+	return requests
+}
+
+// Result returns the final result of the scraping, which can be different to the page type.
+// If not defined, the type parsed into is itself returned as the result.
+func (c *BookCategoryPage) Result() any {
+	// Multi-emission: the parent also emits a result.
+	return c.ToBookCategory()
+}
+
+// BookInfo holds data parsed from the book detail web page.
+// It is also the type of the final result we want.
+//
+// As it does not have a Parse method, pagser will be used to parse.
+// As it does not have a NextRequests method, crawling will end here.
+// As it does not have a Result method, this itself is returned as the result.
+type BookInfo struct {
 	Title string `pagser:"div.product_main h1"`
 	Price string `pagser:"p.price_color"`
 }
 
-func (b *BookPageMulti) Parse(r io.Reader) error {
-	return skater.DefaultParser.ParseReader(b, r)
-}
-
-func (b *BookPageMulti) NextRequests() []skater.PageRequest {
-	return nil
-}
-
-func (b *BookPageMulti) Result() any {
-	return b
-}
-
 func main() {
-	fetcher := &SimpleFetcher{}
-	category := &CategoryMulti{}
+	fetcher := &Fetcher{}
+	config := skater.Config{Fetcher: fetcher}
 
-	scraper, err := skater.NewScraper(skater.Config{Fetcher: fetcher})
+	scraper, err := skater.NewScraper(config)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return
-	}
-	results, err := scraper.Scrape(context.Background(), []skater.PageRequest{
-		{URL: "http://books.toscrape.com/catalogue/category/books/travel_2/index.html", Page: category},
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return
+		log.Fatalf("Error: %v", err)
 	}
 
-	fmt.Println("Results:")
-	for _, r := range results {
-		switch v := r.(type) {
-		case CategoryStats:
-			fmt.Printf("  [Category] %s - %d books\n", v.Category, v.BookURLs)
-		case *BookPageMulti:
-			fmt.Printf("  [Book] %s @ %s\n", v.Title, v.Price)
+	initialRequest := skater.PageRequest{
+		URL:  "http://books.toscrape.com/catalogue/category/books/travel_2/index.html",
+		Page: &BookCategoryPage{},
+	}
+
+	results, err := scraper.Scrape(
+		context.Background(),
+		[]skater.PageRequest{initialRequest},
+	)
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+
+	// Results contain both *BookCategory and *BookPage entries
+	for _, result := range results {
+		switch value := result.(type) {
+		case *BookCategory:
+			fmt.Printf("[Category] %s - %d books\n", value.Category, value.BookURLs)
+		case *BookInfo:
+			fmt.Printf("[Book] %s @ %s\n", value.Title, value.Price)
 		}
 	}
 }
