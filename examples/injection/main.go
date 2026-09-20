@@ -1,10 +1,9 @@
-// Multi-Emission example: Both parent and children emit data.
+// Injection example: Parent page injects data into child pages which emit results.
 //
-// The parent page emits a BookCategory as a result.
-// Each child page emits itself as a result.
-// Every page contributes its own result.
+// The parent pre-fills child pages with known data. Each child emits
+// itself as the result. The parent emits nothing.
 //
-// Run: go run ./examples/multi_emission/main.go
+// Run: go run ./examples/injection/main.go
 package main
 
 import (
@@ -30,27 +29,12 @@ func (f *Fetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) 
 	return response.Body, nil
 }
 
-// BookCategory is the type of the final result we want.
-//
-// This is returned by the Result method of BookCategoryPage.
-type BookCategory struct {
-	Category string
-	BookURLs int
-}
-
 // BookCategoryPage holds data parsed from the book category web page
 //
-// It is not the type of the final result we want. See BookCategory
+// It is not the type of the final result we want. See BookPage
 type BookCategoryPage struct {
 	Category string
 	BookURLs []string
-}
-
-func (c *BookCategoryPage) ToBookCategory() *BookCategory {
-	return &BookCategory{
-		Category: c.Category,
-		BookURLs: len(c.BookURLs),
-	}
 }
 
 func (c *BookCategoryPage) Parse(r io.Reader) error {
@@ -88,8 +72,11 @@ func (c *BookCategoryPage) NextRequests() []skater.PageRequest {
 	requests := make([]skater.PageRequest, len(c.BookURLs))
 	for i, bookURL := range c.BookURLs {
 		requests[i] = skater.PageRequest{
-			URL:  bookURL,
-			Page: &BookInfo{},
+			URL: bookURL,
+			// Inject parent data into the child page up front
+			Page: &BookPage{
+				Category: c.Category,
+			},
 		}
 	}
 
@@ -97,21 +84,26 @@ func (c *BookCategoryPage) NextRequests() []skater.PageRequest {
 }
 
 // Result returns the final result of the scraping, which can be different to the page type.
-// If not defined, the type parsed into is itself returned as the result.
+// If not defined, the type parsed into is returned as the result as is.
 func (c *BookCategoryPage) Result() any {
-	// Multi-emission: the parent also emits a result.
-	return c.ToBookCategory()
+	// The parent emits nothing. The children carry the results.
+	return nil
 }
 
-// BookInfo holds data parsed from the book detail web page.
-// It is also the type of the final result we want.
+// BookPage is the type of the final result we want.
 //
 // As it does not have a Parse method, pagser will be used to parse.
 // As it does not have a NextRequests method, crawling will end here.
-// As it does not have a Result method, this itself is returned as the result.
-type BookInfo struct {
-	Title string `pagser:"div.product_main h1"`
-	Price string `pagser:"p.price_color"`
+// As it does not have a Result method, the type parsed into is
+// returned as the result as is. Every book page is therefore emitted
+// as a result.
+//
+// The parent injects the category into each child page before it is
+// scraped. The child page parses the remaining data itself.
+type BookPage struct {
+	Title    string `pagser:"div.product_main h1"`
+	Price    string `pagser:"p.price_color"`
+	Category string
 }
 
 func main() {
@@ -136,13 +128,11 @@ func main() {
 		log.Fatalf("Error: %v", err)
 	}
 
-	// Results contain both *BookCategory and *BookPage entries
+	// Results contain only *BookPage pages
 	for _, result := range results {
-		switch value := result.(type) {
-		case *BookCategory:
-			fmt.Printf("[Category] %s - %d books\n", value.Category, value.BookURLs)
-		case *BookInfo:
-			fmt.Printf("[Book] %s @ %s\n", value.Title, value.Price)
-		}
+		bookPage := result.(*BookPage)
+		fmt.Printf("Category: %s\n", bookPage.Category)
+		fmt.Printf("Title: %s\n", bookPage.Title)
+		fmt.Printf("Price: %s\n", bookPage.Price)
 	}
 }

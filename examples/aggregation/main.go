@@ -1,10 +1,10 @@
-// Bottom-Up example: Parent aggregates data from child pages.
+// Aggregation example: Parent page emits a result with data aggregated from child pages.
 //
 // The parent page emits a BookCategory as a result.
 // This result contains information aggregated from child pages.
 // Each child page emits nothing as a result.
 //
-// Run: go run ./examples/bottom_up/main.go
+// Run: go run ./examples/aggregation/main.go
 package main
 
 import (
