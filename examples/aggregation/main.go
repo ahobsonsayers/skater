@@ -1,8 +1,9 @@
-// Aggregation example: Parent page emits a result with data aggregated from child pages.
+// Aggregation example: Parent page collects the results of child pages and
+// emits an aggregated result.
 //
 // The parent page emits a BookCategory as a result.
 // This result contains information aggregated from child pages.
-// Each child page emits nothing as a result.
+// Each child page emits no result data.
 //
 // Run: go run ./examples/aggregation/main.go
 package main
@@ -108,24 +109,26 @@ func (c *BookCategoryPage) Parse(r io.Reader) error {
 	return nil
 }
 
-// NextRequests returns requests to crawl into after this page.
+// NextPageRequests returns requests to crawl into after this page.
 // If not defined, crawling ends at this page.
-func (c *BookCategoryPage) NextRequests() []skater.PageRequest {
-	// The same book pointers are shared with the requests below.
-	// Skater fills them in as each child page completes.
-	c.Books = make([]*BookInfo, len(c.BookURLs))
-
+func (c *BookCategoryPage) NextPageRequests() []skater.PageRequest {
 	requests := make([]skater.PageRequest, len(c.BookURLs))
 	for i, bookURL := range c.BookURLs {
-		book := &BookInfo{}
 		requests[i] = skater.PageRequest{
 			URL:  bookURL,
-			Page: book,
+			Page: &BookInfo{},
 		}
-		c.Books[i] = book
 	}
 
 	return requests
+}
+
+// CollectPageResults collects the result data of the child pages spawned
+// by NextPageRequests, called once all child pages have completed.
+func (c *BookCategoryPage) CollectPageResults(childResults []any) {
+	for _, childResult := range childResults {
+		c.Books = append(c.Books, childResult.(*BookInfo))
+	}
 }
 
 // Result returns the final result of the scraping, which can be different to the page type.
@@ -137,19 +140,20 @@ func (c *BookCategoryPage) Result() any {
 // BookInfo holds data parsed from the book detail web page.
 //
 // As it does not have a Parse method, pagser will be used to parse.
-// As it does not have a NextRequests method, crawling will end here.
+// As it does not have a NextPageRequests method, crawling will end here.
+// As it does not have a Result method, the page itself is its result data.
 //
-// Its Result method returns nil, so book pages are not emitted as
-// results. The parent aggregates them.
+// The ShouldEmit method returns false, so book data is not emitted as results.
+// Book data is aggregated by the parent page instead.
 type BookInfo struct {
 	Title string `pagser:"div.product_main h1"`
 	Price string `pagser:"p.price_color"`
 }
 
-// Result returns nil so the book page emits nothing into the results.
-// The parent aggregates child data itself, so only the category page emits a result.
-func (b *BookInfo) Result() any {
-	return nil
+// ShouldEmit returns false so book data is never emitted into the final results.
+// The parent collects and aggregates the book data into its own result instead.
+func (b *BookInfo) ShouldEmit() bool {
+	return false
 }
 
 func main() {

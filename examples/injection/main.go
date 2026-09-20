@@ -1,7 +1,7 @@
 // Injection example: Parent page injects data into child pages which emit results.
 //
 // The parent pre-fills child pages with known data. Each child emits
-// itself as the result. The parent emits nothing.
+// itself as the result. The parent emits no result data.
 //
 // Run: go run ./examples/injection/main.go
 package main
@@ -66,9 +66,9 @@ func (c *BookCategoryPage) Parse(r io.Reader) error {
 	return nil
 }
 
-// NextRequests returns requests to crawl into after this page.
+// NextPageRequests returns requests to crawl into after this page.
 // If not defined, crawling ends at this page.
-func (c *BookCategoryPage) NextRequests() []skater.PageRequest {
+func (c *BookCategoryPage) NextPageRequests() []skater.PageRequest {
 	requests := make([]skater.PageRequest, len(c.BookURLs))
 	for i, bookURL := range c.BookURLs {
 		requests[i] = skater.PageRequest{
@@ -83,23 +83,24 @@ func (c *BookCategoryPage) NextRequests() []skater.PageRequest {
 	return requests
 }
 
-// Result returns the final result of the scraping, which can be different to the page type.
-// If not defined, the type parsed into is returned as the result as is.
-func (c *BookCategoryPage) Result() any {
-	// The parent emits nothing. The children carry the results.
-	return nil
+// ShouldEmit returns false so category data is never emitted into the final results.
+// The parent simply enriches the child page data.
+func (c *BookCategoryPage) ShouldEmit() bool {
+	return false
 }
 
 // BookPage is the type of the final result we want.
 //
 // As it does not have a Parse method, pagser will be used to parse.
-// As it does not have a NextRequests method, crawling will end here.
+// As it does not have a NextPageRequests method, crawling will end here.
 // As it does not have a Result method, the type parsed into is
 // returned as the result as is. Every book page is therefore emitted
 // as a result.
 //
 // The parent injects the category into each child page before it is
 // scraped. The child page parses the remaining data itself.
+// The ShouldEmit method returns false, so category data is not emitted as a result.
+// Category data is use to inject data into the child page instead.
 type BookPage struct {
 	Title    string `pagser:"div.product_main h1"`
 	Price    string `pagser:"p.price_color"`

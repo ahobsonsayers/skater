@@ -81,9 +81,9 @@ func (c *BookCategoryPage) Parse(r io.Reader) error {
 	return nil
 }
 
-// NextRequests returns requests to crawl into after this page.
+// NextPageRequests returns requests to crawl into after this page.
 // If not defined, crawling ends at this page.
-func (c *BookCategoryPage) NextRequests() []skater.PageRequest {
+func (c *BookCategoryPage) NextPageRequests() []skater.PageRequest {
 	requests := make([]skater.PageRequest, len(c.BookURLs))
 	for i, bookURL := range c.BookURLs {
 		requests[i] = skater.PageRequest{
@@ -106,7 +106,7 @@ func (c *BookCategoryPage) Result() any {
 // It is also the type of the final result we want.
 //
 // As it does not have a Parse method, pagser will be used to parse.
-// As it does not have a NextRequests method, crawling will end here.
+// As it does not have a NextPageRequests method, crawling will end here.
 // As it does not have a Result method, this itself is returned as the result.
 type BookInfo struct {
 	Title string `pagser:"div.product_main h1"`
