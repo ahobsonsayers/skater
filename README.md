@@ -30,4 +30,7 @@ What result data a page carries is controlled by the `Result` method:
 - **`Result` returns data:** that data is the result data instead of the page.
 - **`Result` returns `nil`:** the nil itself is the result data — an explicit choice, passed up to collectors and emitted into the final results unless `ShouldEmit` gates it. Combine with `ShouldEmit` returning `false` for a page that only enriches its children.
 
-Working examples live in [`examples/`](examples/): [`aggregation`](examples/aggregation) (parent collects child results, `ShouldEmit` silences children), [`injection`](examples/injection) (parent carries no data, children emit), and [`crawl`](examples/crawl) (parent and children all emit).
+Working examples live in [`examples/`](examples/): 
+ - [`aggregation`](examples/aggregation) (parent collects child results, `ShouldEmit` silences children)
+ - [`injection`](examples/injection) (parent carries no data, children emit)
+ - [`crawl`](examples/crawl) (parent and children all emit)
