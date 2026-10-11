@@ -135,7 +135,7 @@ type testHiddenPage struct {
 	Title string `pagser:"h1"`
 }
 
-func (p *testHiddenPage) ShouldEmit() bool {
+func (*testHiddenPage) ShouldEmit() bool {
 	return false
 }
 

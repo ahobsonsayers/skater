@@ -62,81 +62,93 @@ func (s *Scraper) scrapeRecursive(ctx context.Context, requests []PageRequest, d
 			return results, err
 		}
 
-		// Check the page type we will unmarshal to is a pointer
-		page := request.Page
-		if page == nil || reflect.TypeOf(page).Kind() != reflect.Pointer {
-			return nil, fmt.Errorf("page must be a non-nil pointer, got '%T' for url '%s'", page, request.URL)
-		}
-
-		// Fetch html content
-		htmlReader, err := s.config.Fetcher.Fetch(ctx, request.URL)
+		pageResults, childPageResults, err := s.scrapePage(ctx, request, depth)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch content from url '%s': %w", request.URL, err)
-		}
-
-		// Parse html content either using the Parse method if defined,
-		// or by falling back to tag parsing using pagser
-		var parseErr error
-		if parser, ok := page.(PageParser); ok {
-			parseErr = parser.Parse(htmlReader)
-		} else {
-			parseErr = DefaultParser.ParseReader(page, htmlReader)
-		}
-		htmlReader.Close()
-		if parseErr != nil {
-			return nil, fmt.Errorf("failed to parse content from url '%s': %w", request.URL, parseErr)
-		}
-
-		// Get next page requests using the NextPageRequests method if defined.
-		var nextRequests []PageRequest
-		if p, ok := page.(PageNextRequests); ok {
-			nextRequests = p.NextPageRequests()
-		}
-
-		// Recursively scrape
-		var childPageResults []pageResult
-		if len(nextRequests) > 0 {
-			var err error
-			childPageResults, err = s.scrapeRecursive(ctx, nextRequests, depth+1)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// Collect child results using CollectPageResults method if defined
-		if p, ok := page.(PageCollectResults); ok {
-			childResults := make([]any, 0, len(childPageResults))
-			for _, childResult := range childPageResults {
-				childResults = append(childResults, childResult.Result)
-			}
-
-			p.CollectPageResults(childResults)
-		}
-
-		// Get result data using the Result method if defined,
-		// otherwise falling back to the page as the data
-		var result any
-		if p, ok := page.(PageResult); ok {
-			result = p.Result()
-		} else {
-			result = page
-		}
-
-		// Return results that should be emitted
-		shouldEmit := true
-		if p, ok := page.(PageShouldEmit); ok {
-			shouldEmit = p.ShouldEmit()
+			return nil, err
 		}
 
 		results = append(results, childPageResults...)
-		results = append(
-			results,
-			pageResult{
-				Result:     result,
-				ShouldEmit: shouldEmit,
-			},
-		)
+		results = append(results, pageResults)
 	}
 
 	return results, nil
+}
+
+func (s *Scraper) scrapePage(
+	ctx context.Context,
+	request PageRequest,
+	depth int,
+) (pageData pageResult, childPageResults []pageResult, err error) {
+	// Check the page type we will unmarshal to is a pointer
+	page := request.Page
+	if page == nil || reflect.TypeOf(page).Kind() != reflect.Pointer {
+		return pageResult{}, nil, fmt.Errorf("page must be a non-nil pointer, got '%T' for url '%s'", page, request.URL)
+	}
+
+	// Fetch html content
+	htmlReader, err := s.config.Fetcher.Fetch(ctx, request.URL)
+	if err != nil {
+		return pageResult{}, nil, fmt.Errorf("failed to fetch content from url '%s': %w", request.URL, err)
+	}
+
+	// Parse html content either using the Parse method if defined,
+	// or by falling back to tag parsing using pagser
+	var parseErr error
+	if parser, ok := page.(PageParser); ok {
+		parseErr = parser.Parse(htmlReader)
+	} else {
+		parseErr = DefaultParser.ParseReader(page, htmlReader)
+	}
+	htmlReader.Close()
+	if parseErr != nil {
+		return pageResult{}, nil, fmt.Errorf("failed to parse content from url '%s': %w", request.URL, parseErr)
+	}
+
+	// Get next page requests using the NextPageRequests method if defined.
+	var nextRequests []PageRequest
+	if p, ok := page.(PageNextRequests); ok {
+		nextRequests = p.NextPageRequests()
+	}
+
+	// Recursively scrape
+	if len(nextRequests) > 0 {
+		childPageResults, err = s.scrapeRecursive(ctx, nextRequests, depth+1)
+		if err != nil {
+			return pageResult{}, nil, err
+		}
+	}
+
+	// Collect child results using CollectPageResults method if defined
+	collector, collectorOk := page.(PageCollectResults)
+	if collectorOk {
+		collectChildResults(collector, childPageResults)
+	}
+
+	// Get result data using the Result method if defined,
+	// otherwise falling back to the page as the data
+	var result any
+	if p, ok := page.(PageResult); ok {
+		result = p.Result()
+	} else {
+		result = page
+	}
+
+	// Return results that should be emitted
+	shouldEmit := true
+	if p, ok := page.(PageShouldEmit); ok {
+		shouldEmit = p.ShouldEmit()
+	}
+
+	return pageResult{
+		Result:     result,
+		ShouldEmit: shouldEmit,
+	}, childPageResults, nil
+}
+
+func collectChildResults(collector PageCollectResults, childPageResults []pageResult) {
+	childResults := make([]any, 0, len(childPageResults))
+	for _, childResult := range childPageResults {
+		childResults = append(childResults, childResult.Result)
+	}
+	collector.CollectPageResults(childResults)
 }
