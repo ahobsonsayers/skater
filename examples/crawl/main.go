@@ -20,7 +20,7 @@ import (
 
 type Fetcher struct{}
 
-func (_ *Fetcher) Fetch(_ context.Context, url string) (io.ReadCloser, error) {
+func (*Fetcher) Fetch(_ context.Context, url string) (io.ReadCloser, error) {
 	response, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -136,12 +136,13 @@ func main() {
 	}
 
 	// Results contain both *BookCategory and *BookInfo entries
-	for _, result := range results {
-		switch value := result.(type) {
-		case *BookCategory:
-			fmt.Printf("[Category] %s - %d books\n", value.Category, value.BookURLs)
-		case *BookInfo:
-			fmt.Printf("[Book] %s @ %s\n", value.Title, value.Price)
-		}
+	bookCategories := skater.GetResults[*BookCategory](results)
+	for _, bookCategory := range bookCategories {
+		fmt.Printf("[Category] %s - %d books\n", bookCategory.Category, bookCategory.BookURLs)
+	}
+
+	books := skater.GetResults[*BookInfo](results)
+	for _, book := range books {
+		fmt.Printf("[Book] %s @ %s\n", book.Title, book.Price)
 	}
 }

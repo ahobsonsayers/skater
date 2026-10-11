@@ -20,7 +20,7 @@ import (
 
 type Fetcher struct{}
 
-func (_ *Fetcher) Fetch(_ context.Context, url string) (io.ReadCloser, error) {
+func (*Fetcher) Fetch(_ context.Context, url string) (io.ReadCloser, error) {
 	response, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func (c *BookCategoryPage) NextPageRequests() []skater.PageRequest {
 
 // ShouldEmit returns false so category data is never emitted into the final results.
 // The parent simply enriches the child page data.
-func (c *BookCategoryPage) ShouldEmit() bool {
+func (*BookCategoryPage) ShouldEmit() bool {
 	return false
 }
 
@@ -130,8 +130,8 @@ func main() {
 	}
 
 	// Results contain only *BookPage pages
-	for _, result := range results {
-		bookPage := result.(*BookPage)
+	bookPages := skater.GetResults[*BookPage](results)
+	for _, bookPage := range bookPages {
 		fmt.Printf("Category: %s\n", bookPage.Category)
 		fmt.Printf("Title: %s\n", bookPage.Title)
 		fmt.Printf("Price: %s\n", bookPage.Price)

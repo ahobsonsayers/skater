@@ -23,7 +23,7 @@ import (
 
 type Fetcher struct{}
 
-func (_ *Fetcher) Fetch(_ context.Context, url string) (io.ReadCloser, error) {
+func (*Fetcher) Fetch(_ context.Context, url string) (io.ReadCloser, error) {
 	response, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ type BookInfo struct {
 
 // ShouldEmit returns false so book data is never emitted into the final results.
 // The parent collects and aggregates the book data into its own result instead.
-func (_ *BookInfo) ShouldEmit() bool {
+func (*BookInfo) ShouldEmit() bool {
 	return false
 }
 
@@ -179,8 +179,8 @@ func main() {
 	}
 
 	// Results contain only *BookCategory values
-	for _, result := range results {
-		bookCategory := result.(*BookCategory)
+	bookCategories := skater.GetResults[*BookCategory](results)
+	for _, bookCategory := range bookCategories {
 		fmt.Printf("Category: %s\n", bookCategory.Category)
 		fmt.Printf("Books found: %d\n", bookCategory.BookCount)
 		fmt.Printf("Total price: £%.2f\n", bookCategory.TotalPrice)
