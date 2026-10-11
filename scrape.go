@@ -64,7 +64,7 @@ func (s *Scraper) scrapeRecursive(ctx context.Context, requests []PageRequest, d
 
 		// Check the page type we will unmarshal to is a pointer
 		page := request.Page
-		if page == nil || reflect.TypeOf(page).Kind() != reflect.Ptr {
+		if page == nil || reflect.TypeOf(page).Kind() != reflect.Pointer {
 			return nil, fmt.Errorf("page must be a non-nil pointer, got '%T' for url '%s'", page, request.URL)
 		}
 

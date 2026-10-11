@@ -23,10 +23,13 @@ const (
 const (
 	book1HTML    = "<html><h1>Book One</h1><p class='price'>£5.00</p></html>"
 	book2HTML    = "<html><h1>Book Two</h1><p class='price'>£10.00</p></html>"
-	categoryHTML = "<html><h1>Travel</h1><a class='book-link' href='" + book1URL + "'>Book 1</a><a class='book-link' href='" + book2URL + "'>Book 2</a></html>"
-	chain1HTML   = "<html><a id='next' href='" + chain2URL + "'>Next</a></html>"
-	chain2HTML   = "<html><a id='next' href='" + chain3URL + "'>Next</a></html>"
-	chain3HTML   = "<html></html>"
+	categoryHTML = "<html><h1>Travel</h1>" +
+		"<a class='book-link' href='" + book1URL + "'>Book 1</a>" +
+		"<a class='book-link' href='" + book2URL + "'>Book 2</a>" +
+		"</html>"
+	chain1HTML = "<html><a id='next' href='" + chain2URL + "'>Next</a></html>"
+	chain2HTML = "<html><a id='next' href='" + chain3URL + "'>Next</a></html>"
+	chain3HTML = "<html></html>"
 )
 
 type fakeFetcher struct {

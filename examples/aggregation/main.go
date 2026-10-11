@@ -23,7 +23,7 @@ import (
 
 type Fetcher struct{}
 
-func (f *Fetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) {
+func (_ *Fetcher) Fetch(_ context.Context, url string) (io.ReadCloser, error) {
 	response, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -90,9 +90,9 @@ func (c *BookCategoryPage) Parse(r io.Reader) error {
 	c.Category = doc.Find("div.page-header h1").First().Text()
 
 	// Parse URLs of books in category
-	baseURL := "http://books.toscrape.com/catalogue/"
+	baseURL := "https://books.toscrape.com/catalogue/"
 	doc.Find("h3 a").Each(
-		func(i int, s *goquery.Selection) {
+		func(_ int, s *goquery.Selection) {
 			href, ok := s.Attr("href")
 			if !ok {
 				return
@@ -152,7 +152,7 @@ type BookInfo struct {
 
 // ShouldEmit returns false so book data is never emitted into the final results.
 // The parent collects and aggregates the book data into its own result instead.
-func (b *BookInfo) ShouldEmit() bool {
+func (_ *BookInfo) ShouldEmit() bool {
 	return false
 }
 
@@ -166,7 +166,7 @@ func main() {
 	}
 
 	initialRequest := skater.PageRequest{
-		URL:  "http://books.toscrape.com/catalogue/category/books/travel_2/index.html",
+		URL:  "https://books.toscrape.com/catalogue/category/books/travel_2/index.html",
 		Page: &BookCategoryPage{},
 	}
 

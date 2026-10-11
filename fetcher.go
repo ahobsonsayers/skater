@@ -26,7 +26,7 @@ func (f *HTTPFetcher) Client() *http.Client {
 }
 
 func (f *HTTPFetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

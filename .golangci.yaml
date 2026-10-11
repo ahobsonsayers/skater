@@ -12,7 +12,8 @@ formatters:
 
   settings:
     gofumpt:
-      extra-rules: true
+      extra:
+        group-params: true
 
 linters:
   # Linters: https://golangci-lint.run/docs/linters
