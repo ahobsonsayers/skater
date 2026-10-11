@@ -77,8 +77,8 @@ func (s *Scraper) scrapeRecursive(ctx context.Context, requests []PageRequest, d
 		// Parse html content either using the Parse method if defined,
 		// or by falling back to tag parsing using pagser
 		var parseErr error
-		if p, ok := page.(PageParser); ok {
-			parseErr = p.Parse(htmlReader)
+		if parser, ok := page.(PageParser); ok {
+			parseErr = parser.Parse(htmlReader)
 		} else {
 			parseErr = DefaultParser.ParseReader(page, htmlReader)
 		}

@@ -11,11 +11,11 @@ import (
 
 // Fetcher is used to fetch html content.
 type Fetcher interface {
-	// Fetcher fetches html content from the url given.
+	// Fetch fetches html content from the url given.
 	Fetch(ctx context.Context, url string) (io.ReadCloser, error)
 }
 
-// HTTPFetcher is a Fetcher implementation using an net/http Client.
+// HTTPFetcher is a Fetcher implementation using a net/http Client.
 type HTTPFetcher struct {
 	client *http.Client
 }
@@ -31,17 +31,17 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, err
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := f.client.Do(request)
+	response, err := f.client.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch url '%s': %w", url, err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	if response.StatusCode != http.StatusOK {
+		response.Body.Close()
+		return nil, fmt.Errorf("unexpected status code: %d", response.StatusCode)
 	}
 
-	return resp.Body, nil
+	return response.Body, nil
 }
 
 // NewHTTPFetcher creates a new HTTPFetcher with a default *http.Client.
@@ -67,16 +67,16 @@ func (f *ReqFetcher) Client() *req.Client {
 }
 
 func (f *ReqFetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) {
-	resp, err := f.client.R().SetContext(ctx).Get(url)
+	response, err := f.client.R().SetContext(ctx).Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch url '%s': %w", url, err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", response.StatusCode)
 	}
 
-	return resp.Body, nil
+	return response.Body, nil
 }
 
 // NewReqFetcher creates a new ReqFetcher with a default *req.Client.
